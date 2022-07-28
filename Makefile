@@ -1,40 +1,77 @@
-ligo=docker run --rm -v "$$PWD":"$$PWD" -w "$$PWD" ligolang/ligo:0.41.0
-protocol=--protocol ithaca
-json=--michelson-format json
+SHELL := /bin/bash
 
-all: clean compile test
+ifndef LIGO
+LIGO=docker run -u $(id -u):$(id -g) --rm -v "$(PWD)":"$(PWD)" -w "$(PWD)" ligolang/ligo:next
+endif
+# ^ use LIGO en var bin if configured, otherwise use docker
+
+project_root=--project-root .
+# ^ required when using packages
 
 help:
-	@echo  'Usage:'
-	@echo  '  all             - Remove generated Michelson files, recompile smart contracts, lauch all tests and originate contract'
-	@echo  '  compile '
-	@echo  '  clean           - Remove generated Michelson and JavaScript files'
-	@echo  '  test            - Run Ligo tests'
-	@echo  '  originate       - Deploy multisig smart contract (typescript using Taquito)'
+	@grep -E '^[ a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+	awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
+compile = $(LIGO) compile contract $(project_root) ./src/$(1) -o ./compiled/$(2) $(3)
+# ^ compile contract to michelson or micheline
 
-compile: compile_ml
+test = $(LIGO) run test $(project_root) ./test/$(1)
+# ^ run given test file
 
-compile_ml: cameligo/contract.mligo
+compile: ## compile contract
 	@if [ ! -d ./compiled ]; then mkdir ./compiled ; fi
-	@echo "Compiling to Michelson"
-	@$(ligo) compile contract cameligo/contract.mligo $(protocol) > compiled/Multisig_mligo.tz
-	@echo "Compiling to Michelson in JSON format"
-	@$(ligo) compile contract cameligo/contract.mligo $(json) $(protocol) > compiled/Multisig_mligo.json
+	@$(call compile,main.mligo,multisig.tz)
+	@$(call compile,main.mligo,multisig.json,--michelson-format json)
 
-clean:
-	@echo "Removing Michelson files"
-	@rm -f compiled/*.tz
-	@echo "Removing Michelson 'json format' files"
-	@rm -f compiled/*.json
+lambda-compile: ## compile a lambda (F=./lambdas/change_keys.mligo make lambda-compile)
+# ^ helper to compile lambda from a file, used during development of lambdas
+ifndef F
+	@echo 'please provide an init file (F=)'
+else
+	@$(LIGO) compile expression $(project_root) cameligo lambda_ --init-file $(F)
+	# ^ the lambda is expected to be bound to the name 'lambda_'
+endif
 
-test: tests/multisig.test.jsligo
-	@echo "Running tests"
-	@$(ligo) run test tests/multisig.test.jsligo $(protocol)
-	@echo "Running mutation tests"
-	@$(ligo) run test tests/multisig_mutation.test.jsligo $(protocol)
+lambda-hash: ## get packed lambda expression and hash (F=./lambdas/change_keys.mligo make lambda-hash)
+# ^ helper to get packed lambda and hash
+ifndef F
+	@echo 'please provide an init file (F=)'
+else
+	@echo 'Packed:'
+	@$(LIGO) run interpret $(project_root) 'Bytes.pack(lambda_)' --init-file $(F)
+	@echo "Hash (sha256):"
+	@$(LIGO) run interpret $(project_root) 'Crypto.sha256(Bytes.pack(lambda_))' --init-file $(F)
+endif
 
-originate: origination/deployMultisig.ts compile
-	@echo "Deploying contract"
-	@tsc origination/deployMultisig.ts --esModuleInterop --resolveJsonModule
-	@node origination/deployMultisig.js
+clean: ## clean up
+	@rm -rf compiled
+
+deploy: ## deploy
+	@if [ ! -f ./scripts/metadata.json ]; then cp scripts/metadata.json.dist \
+        scripts/metadata.json ; fi
+	@npx ts-node ./scripts/deploy.ts
+
+install: ## install dependencies
+	@if [ ! -f ./.env ]; then cp .env.dist .env ; fi
+	@$(LIGO) install
+	@npm i
+
+.PHONY: test
+test: ## run tests (SUITE=propose make test)
+ifndef SUITE
+	@$(call test,default.test.mligo)
+	@$(call test,propose.test.mligo)
+	@$(call test,endorse.test.mligo)
+	@$(call test,execute.test.mligo)
+else
+	@$(call test,$(SUITE).test.mligo)
+endif
+
+lint: ## lint code
+	@npx eslint ./scripts --ext .ts
+
+sandbox-start: ## start sandbox
+	@./scripts/run-sandbox
+
+sandbox-stop: ## stop sandbox
+	@docker stop sandbox

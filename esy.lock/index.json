@@ -1,0 +1,29 @@
+{
+  "checksum": "9de26f5cb8fae50e2db4838b43b9f23b",
+  "root": "multisig-cameligo@link-dev:./esy.json",
+  "node": {
+    "tezos-ligo-fa2@1.0.3@d41d8cd9": {
+      "id": "tezos-ligo-fa2@1.0.3@d41d8cd9",
+      "name": "tezos-ligo-fa2",
+      "version": "1.0.3",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://registry.npmjs.org/tezos-ligo-fa2/-/tezos-ligo-fa2-1.0.3.tgz#sha1:330beb5abaf25293d6a562556d5e298912f59d8b"
+        ]
+      },
+      "overrides": [],
+      "dependencies": [],
+      "devDependencies": []
+    },
+    "multisig-cameligo@link-dev:./esy.json": {
+      "id": "multisig-cameligo@link-dev:./esy.json",
+      "name": "multisig-cameligo",
+      "version": "link-dev:./esy.json",
+      "source": { "type": "link-dev", "path": ".", "manifest": "esy.json" },
+      "overrides": [],
+      "dependencies": [ "tezos-ligo-fa2@1.0.3@d41d8cd9" ],
+      "devDependencies": []
+    }
+  }
+}

@@ -1,32 +1,98 @@
-# Multi signature
+# multisig-cameligo
 
-This exeample is meant to illustrate a transaction requiring multiple people's confirmation before the operation is executed. With this MVP example smart-contrat, we show how to use multisig-type confirmation from M of N signers in order to send an operation. In this example, we will bind a call to a token transfer from another smart-contrat, since it’s the most classic use case ( Fungible Asset 2 ).
+This contract implements an asynchronous variant of the
+[generic multisig contract](https://tezos.gitlab.io/user/multisig.html#the-generic-multisig-contract).
 
-## The multisig pattern
+What is identical to the generic multisig contract:
 
-Step Zero : deploy the contract with desired parameters and bind it to the entrypoint to execute. Each time a multisignature is required :
+- it can receive tokens from unauthenticated sources on its default entrypoint of type unit
+- the possible outcomes of an endorsed proposal are:
+  - atomically execute an arbitrary list of operations (of type lambda unit (list operation) in Michelson)
+  - update the contract storage to change both the threshold, and the participant public keys
 
-1. A signer proposes a new operation execution with parameters
-2. M of N possible signers submit an approval transaction to the smart-contrat
-3. When the last required signer submits their approval transaction and the threshold is obtained, the resulting original transaction of the first signer is executed
+What differs from the generic multisig contract:
 
-Any number of operations can be in valid execution at the same time.
+- proposals are kept in storage until they reach a number of endorsements (threshold)
+- the outcome is stored as a hash along the proposal
+- endorsements and execution of the proposal are in separate entrypoints
+- a proposal can be cancelled at any time
 
-The multisig contract can be invoked to request any operation on other smart contracts.
+Finally, contrary to the generic multisig, this contract has not been formally verified.
 
-## Content
+## Requirements
 
-The `multisig` directory contains 2 directories:
-- cameligo: for smart contracts implementation in cameligo and `ligo` command lines for simulating all entrypoints
-- jsligo: for smart contracts implementation in JSligo and `ligo` command lines for simulating all entrypoints
+The contract is written in `cameligo` flavour of [LigoLANG](https://ligolang.org/),
+to be able to compile the contract, you need either:
 
-## Compiling / testing / deploying
+- a [ligo binary](https://ligolang.org/docs/intro/installation#static-linux-binary),
+  in this case, to use the binary, you need to have set up a `LIGO` environment variable,
+  pointing to the binary (see [Makefile](./Makefile))
+- or [docker](https://docs.docker.com/engine/install/)
 
-This repository provides a Makefile for compiling and testing smart contracts. One can type `make` to display all available rules. 
-The `make all` command will delete the compiled smart contract, then compile the smart contract and then launch tests.
+For deploy scripts, you also need to have [nodejs](https://nodejs.org/en/) installed,
+up to version 14 and docker if you wish to deploy on a sandbox.
 
-The `make compile` command triggers the compilation of the smart contract.
+## Usage
 
-The `make test` command launches tests on the compiled smart contract.
+1. Run `make install` to install dependencies
+2. Run `make` to see available commands
 
-The `make originate` command deploys the smart contract (depending on .env file information).
+## Data types
+
+```mermaid
+classDiagram
+    Metadata <|-- Storage
+    Proposal <|-- Storage
+
+    class Metadata{
+        type t
+    }
+
+    class Proposal{
+        type t
+
+        make(make_params) t
+        get(id, t big_map) t
+        endorse(t, key) t
+        next_id(id) id
+        _check_sig(key, id, bytes, signature) unit
+    }
+
+    class Storage{
+        type t
+
+        create_proposal(Proposal.t, t) t
+        update_proposal(Proposal.id, Proposal.t, t) t
+        remove_proposal(Proposal.id, t) t
+        _check_is_authorized(key, t) unit
+    }
+```
+
+
+## Entry points
+
+### Create a proposal
+
+A proposal is composed by:
+  - a set of every endorser public key
+  - the hash of the proposed outcome
+
+```mermaid
+sequenceDiagram
+  actor u  as User
+
+  participant m as Multisig
+
+  u->>m: propose(Proposal.make_params)
+```
+
+### Endorse a proposal
+
+```mermaid
+sequenceDiagram
+  actor u  as User
+
+  participant m as Multisig
+
+  u->>m: endorse(Proposal.endorse_params)
+```
